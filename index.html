@@ -39,7 +39,7 @@ body {
 
 <body>
 
-<div id="loop"></div> 
+<div id="loop"></div>
 <script>
 
 var _fillColors = d3.scale.category20();
@@ -58,7 +58,7 @@ function createSankey(container, data) {
     .nodePadding(10)
     .nodes(nodes)
     .links(links)
-    .layout(32);  
+    .layout(32);
 
   var svg = d3.select(container).append("svg")
       .attr("width", width)
@@ -146,7 +146,12 @@ function createSankey(container, data) {
       .attr("text-anchor", "start");
 
   function dragmove(d) {
-    d3.select(this).attr("transform", "translate(" + d.x + "," + (d.y = Math.max(0, Math.min(height - d.dy, d3.event.y))) + ")");
+    d3.select(this).attr("transform",
+        "translate(" + (
+               d.x = Math.max(0, Math.min(width - d.dx, d3.event.x))
+            ) + "," + (
+                   d.y = Math.max(0, Math.min(height - d.dy, d3.event.y))
+            ) + ")");
     sankey.relayout();
     path1.attr('d', path(1));
     path0.attr('d', path(0));
