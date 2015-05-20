@@ -68,37 +68,64 @@ zz = d3.nest!key (.type) .key (.party)
 .entries rows
 console.log zz
 
-nodes = []
-links = []
+render!
+inverse = false
 
-all = nodes.length
-nodes.push {name: "第八屆立法委員(#seats)"}
+d3.select('button#inverse')
+  .on "click" ->
+    inverse := !inverse
+    render!
 
-# XXX without sorting it makes the default color more or less familiar with the party
-#by_party .= sort (a, b) -> b.values.seats - a.values.seats
+function render()
+  nodes = []
+  links = []
 
-percent = d3.format("5.1f");
-for {key: party, values: entry} in by_party
-  if entry.seats
-    entry.node = nodes.length
-    nodes.push {name: party + " (#{entry.seats}) " + percent(entry.seats / seats * 100) + '%'}
-    links.push {source: entry.node, target: all, value: entry.seats}
+  make-link = (source, target) ->
+    if inverse
+      {source: target, target: source}
+    else
+      {source, target}
 
-for {key: type, values: parties} in zz
-  parties .= sort (a, b) -> b.values.seats - a.values.seats
-  for {key: party, values: entry} in parties
-    party_node = [values.node for {key, values} in by_party when key is party ].0
+  all = nodes.length
+  nodes.push {name: "第八屆立法委員(#seats)"}
+
+  # XXX without sorting it makes the default color more or less familiar with the party
+  #by_party .= sort (a, b) -> b.values.seats - a.values.seats
+
+  percent = d3.format("5.1f");
+  for {key: party, values: entry} in by_party
     if entry.seats
       entry.node = nodes.length
-      nodes.push {name: party + ' ' + type_name[type] + " (#{entry.seats}) " + percent(entry.seat_percent * 100) + '%'}
-      links.push {source: entry.node, target: party_node, value: entry.seats}
+      nodes.push {name: party + " (#{entry.seats}) " + percent(entry.seats / seats * 100) + '%'}
+      links.push {value: entry.seats} <<< make-link entry.node, all
 
-      entry.vote_node = nodes.length
-      nodes.push {name: party + ' ' + type_name[type] + ' 得票' + percent(entry.popular_percent * 100) + '%' }
-      links.push {source: entry.vote_node, target: entry.node, value: entry.seats / entry.seat_percent * entry.popular_percent}
+  for {key: type, values: parties} in zz
+    parties .= sort (a, b) -> b.values.seats - a.values.seats
+    for {key: party, values: entry} in parties
+      party_node = [values.node for {key, values} in by_party when key is party ].0
+      if entry.seats
+        entry.node = nodes.length
+        nodes.push {name: party + ' ' + type_name[type] + " (#{entry.seats}) " + percent(entry.seat_percent * 100) + '%'}
+        links.push {value: entry.seats} <<< make-link entry.node, party_node
 
-data = {nodes, links}
-createSankey document.getElementById('loop'), data
+        entry.vote_node = nodes.length
+        nodes.push {name: party + ' ' + type_name[type] + ' 得票' + percent(entry.popular_percent * 100) + '%' }
+        links.push {value: entry.seats / entry.seat_percent * entry.popular_percent} <<< make-link entry.vote_node, entry.node
+
+  data = {nodes, links}
+  {sankey, node} = createSankey document.getElementById('loop'), data
+
+  # WIP
+  return
+  node.each ->
+    return unless it.targetLinks.length is 1 and it.sourceLinks.length is 1
+    diff = it.sourceLinks.0.source.value - it.targetLinks.0.source.value
+    d3.select this .append "rect"
+      .attr "height" Math.abs(diff) / it.value * it.dy
+      .attr "y" (it.value - Math.abs(diff)) / it.value * it.dy
+      .attr "width", sankey.nodeWidth!
+      .style "fill",  -> diff > 0 ? 'red' : 'white'
+      .style "opacity", 0.5
 
 </script>
 <script>
@@ -108,12 +135,11 @@ createSankey document.getElementById('loop'), data
 
 <body>
 <h1>2012 立委選舉得票與席次分配</h1>
-
+<button id="inverse">&lt;-&gt;</button>
 <div id="loop"></div>
 <script>
 
 var _fillColors = d3.scale.category20();
-
 
 function createSankey(container, data) {
   var nodes = data.nodes;
@@ -130,7 +156,7 @@ function createSankey(container, data) {
     .links(links)
     .layout(0);
 
-  var svg = d3.select(container).append("svg")
+  var svg = d3.select(container).html('').append("svg")
       .attr("width", width)
       .attr("height", height)
     .append("g")
@@ -216,6 +242,7 @@ function createSankey(container, data) {
       .attr("x", 6 + sankey.nodeWidth())
       .attr("text-anchor", "start");
 
+  return {sankey: sankey, node: node};
   function dragmove(d) {
     d3.select(this).attr("transform",
         "translate(" + (
