@@ -66,7 +66,6 @@ zz = d3.nest!key (.type) .key (.party)
   popular = d3.sum it, (.popular)
   { seats, popular, seat_percent: seats / by_type[it.0.type].seats, popular_percent: popular / by_type[it.0.type].popular }
 .entries rows
-console.log zz
 
 render!
 inverse = false
@@ -87,7 +86,7 @@ function render()
       {source, target}
 
   all = nodes.length
-  nodes.push {name: "第八屆立法委員(#seats)"}
+  nodes.push {name: "第八屆立法委員", seats: 113}
 
   # XXX without sorting it makes the default color more or less familiar with the party
   #by_party .= sort (a, b) -> b.values.seats - a.values.seats
@@ -96,7 +95,7 @@ function render()
   for {key: party, values: entry} in by_party
     if entry.seats
       entry.node = nodes.length
-      nodes.push {name: party + " (#{entry.seats}) " + percent(entry.seats / seats * 100) + '%'}
+      nodes.push {name: party + " 席次 " + percent(entry.seats / seats * 100) + '%', entry.seats}
       links.push {value: entry.seats} <<< make-link entry.node, all
 
   for {key: type, values: parties} in zz
@@ -105,16 +104,37 @@ function render()
       party_node = [values.node for {key, values} in by_party when key is party ].0
       if entry.seats
         entry.node = nodes.length
-        nodes.push {name: party + ' ' + type_name[type] + " (#{entry.seats}) " + percent(entry.seat_percent * 100) + '%'}
+        nodes.push {name: party + ' ' + type_name[type] + '席次' + percent(entry.seat_percent * 100) + '%', entry.seats, type}
         links.push {value: entry.seats} <<< make-link entry.node, party_node
 
         entry.vote_node = nodes.length
-        nodes.push {name: party + ' ' + type_name[type] + ' 得票' + percent(entry.popular_percent * 100) + '%' }
+        nodes.push {name: party + ' ' + type_name[type] + '得票' + percent(entry.popular_percent * 100) + '%', entry.popular, entry.popular_percent, type}
         links.push {value: entry.seats / entry.seat_percent * entry.popular_percent} <<< make-link entry.vote_node, entry.node
 
   data = {nodes, links}
   {sankey, node} = createSankey document.getElementById('loop'), data
 
+  width = 1200
+  height = 700
+  console.log sankey.size!
+  node.append "text"
+    .attr "x" -6
+    .attr "y" -> it.dy / 2
+    .attr "dy" ".35em"
+    .attr "text-anchor" "end"
+    .attr "transform" null
+    .text (.name)
+    .filter -> it.x < width / 2
+    .attr "x" 6 + sankey.nodeWidth!
+    .attr "text-anchor" "start"
+
+  node.filter (.seats?)
+    .append "text"
+    .text (.seats)
+    .attr "text-anchor" "middle"
+    .attr "fill" "white"
+    .attr "text-shadow" '0 2px 0 #000'
+    .attr "transform" -> "rotate(-90) translate(#{ -it.dy / 2 },#{ sankey.nodeWidth() / 2 + 3})"
   # WIP
   return
   node.each ->
@@ -123,9 +143,9 @@ function render()
     d3.select this .append "rect"
       .attr "height" Math.abs(diff) / it.value * it.dy
       .attr "y" (it.value - Math.abs(diff)) / it.value * it.dy
-      .attr "width", sankey.nodeWidth!
-      .style "fill",  -> diff > 0 ? 'red' : 'white'
-      .style "opacity", 0.5
+      .attr "width" sankey.nodeWidth!
+      .style "fill"  -> diff > 0 ? 'red' : 'white'
+      .style "opacity" 0.5
 
 </script>
 <script>
@@ -210,7 +230,7 @@ function createSankey(container, data) {
       })
       .style("stroke-width", 2)
       .style("stroke", function(d) {
-        return _fillColors(d.name.split(/ /)[1] || d.name);
+        return _fillColors(d.type || d.name.split(/ /)[0]);
       })
     .on("mouseover", function(d){
       svg.selectAll(".link")
@@ -230,17 +250,6 @@ function createSankey(container, data) {
     })
     .append("title")
       .text(function(d) { return d.name; });
-
-  node.append("text")
-      .attr("x", -6)
-      .attr("y", function(d) { return d.dy / 2; })
-      .attr("dy", ".35em")
-      .attr("text-anchor", "end")
-      .attr("transform", null)
-      .text(function(d) { return d.name; })
-    .filter(function(d) { return d.x < width / 2; })
-      .attr("x", 6 + sankey.nodeWidth())
-      .attr("text-anchor", "start");
 
   return {sankey: sankey, node: node};
   function dragmove(d) {
