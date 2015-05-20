@@ -1,6 +1,6 @@
 <html>
 <head>
-<title>Cyclic Sankeys</title>
+<title>2012 立委選舉</title>
 <style type="text/css">
 #chart {
   height: 500px;
@@ -33,11 +33,81 @@ body {
 
 </style>
 
+<script src="https://cdnjs.cloudflare.com/ajax/libs/livescript/1.4.0/livescript-min.js"></script>
 <script src="http://d3js.org/d3.v3.min.js"></script>
 <script src="sankey.js"></script>
+<script type="text/ls">
+
+type_name = do
+  constituency: '區域'
+  party: '不分區'
+  highland: '山原'
+  lowland: '平原'
+
+error, rows <- d3.csv "LVTW2012.csv", -> it <<< {seats: +it.seats, popular: +it.popular}
+
+seats = d3.sum rows, (.seats)
+
+by_party = d3.nest!key (.party)
+.rollup ->
+   seats: d3 .sum it, (.seats)
+   popular: d3 .sum it, (.popular)
+.entries rows
+
+by_type = d3.nest!key (.type)
+.rollup ->
+   seats: d3 .sum it, (.seats)
+   popular: d3 .sum it, (.popular)
+.map rows
+
+zz = d3.nest!key (.type) .key (.party)
+.rollup (it, key) ->
+  seats = d3.sum it, (.seats)
+  popular = d3.sum it, (.popular)
+  { seats, popular, seat_percent: seats / by_type[it.0.type].seats, popular_percent: popular / by_type[it.0.type].popular }
+.entries rows
+console.log zz
+
+nodes = []
+links = []
+
+all = nodes.length
+nodes.push {name: "第八屆立法委員(#seats)"}
+
+# XXX without sorting it makes the default color more or less familiar with the party
+#by_party .= sort (a, b) -> b.values.seats - a.values.seats
+
+percent = d3.format("5.1f");
+for {key: party, values: entry} in by_party
+  if entry.seats
+    entry.node = nodes.length
+    nodes.push {name: party + " (#{entry.seats}) " + percent(entry.seats / seats * 100) + '%'}
+    links.push {source: entry.node, target: all, value: entry.seats}
+
+for {key: type, values: parties} in zz
+  parties .= sort (a, b) -> b.values.seats - a.values.seats
+  for {key: party, values: entry} in parties
+    party_node = [values.node for {key, values} in by_party when key is party ].0
+    if entry.seats
+      entry.node = nodes.length
+      nodes.push {name: party + ' ' + type_name[type] + " (#{entry.seats}) " + percent(entry.seat_percent * 100) + '%'}
+      links.push {source: entry.node, target: party_node, value: entry.seats}
+
+      entry.vote_node = nodes.length
+      nodes.push {name: party + ' ' + type_name[type] + ' 得票' + percent(entry.popular_percent * 100) + '%' }
+      links.push {source: entry.vote_node, target: entry.node, value: entry.seats / entry.seat_percent * entry.popular_percent}
+
+data = {nodes, links}
+createSankey document.getElementById('loop'), data
+
+</script>
+<script>
+    require("LiveScript").go()
+</script>
 </head>
 
 <body>
+<h1>2012 立委選舉得票與席次分配</h1>
 
 <div id="loop"></div>
 <script>
@@ -58,7 +128,7 @@ function createSankey(container, data) {
     .nodePadding(10)
     .nodes(nodes)
     .links(links)
-    .layout(32);
+    .layout(0);
 
   var svg = d3.select(container).append("svg")
       .attr("width", width)
@@ -110,10 +180,11 @@ function createSankey(container, data) {
       .attr("height", function(d) { return d.dy; })
       .attr("width", sankey.nodeWidth())
       .style("fill", function(d) {
-        return _fillColors(d.name);
+        return _fillColors(d.name.split(/ /)[0]);
       })
+      .style("stroke-width", 2)
       .style("stroke", function(d) {
-        return _fillColors(d.name);
+        return _fillColors(d.name.split(/ /)[1] || d.name);
       })
     .on("mouseover", function(d){
       svg.selectAll(".link")
@@ -159,10 +230,6 @@ function createSankey(container, data) {
   }
 
 }
-
-d3.json("ly-flow.json", function(data) {
-  createSankey(document.getElementById('loop'), data);
-});
 
 </script>
 
